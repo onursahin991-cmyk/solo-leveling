@@ -11,52 +11,49 @@ const QUESTIONS = [
   { id: "pullup", label: "Barfiks", question: "Kaç barfiks çekebiliyorsun?", unit: "tekrar" },
 ];
 
-const STYLES = `
-body{background:#050810;color:#e2e8f0;font-family:sans-serif;margin:0}
-.sl-btn{background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid #4f46e5;color:#a5b4fc;padding:12px;cursor:pointer;width:100%;font-weight:bold}
-.sl-inp{background:#0d1117;border:1px solid #1e293b;color:#fff;padding:12px;width:100%;margin-bottom:15px;font-size:16px}
-`;
-
 export default function App() {
   const [screen, setScreen] = useState("intro");
   const [answers, setAnswers] = useState({});
   const [currentQ, setCurrentQ] = useState(0);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [errorLog, setErrorLog] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const callAI = async (prompt, data) => {
-    // Vercel'deki değişkenin başına REACT_APP_ eklediğinden emin ol
+    // ÖNEMLİ: Vercel'deki değişken isminin başına REACT_APP_ eklediğinden emin ol!
     const key = process.env.REACT_APP_GEMINI_KEY;
     
-    if (!key) throw new Error("API Anahtarı bulunamadı. Vercel ayarlarını kontrol et.");
+    if (!key) {
+      throw new Error("Sistem hatası: API anahtarı tanımlı değil. Vercel Settings -> Environment Variables kısmına REACT_APP_GEMINI_KEY eklediğinizden emin olun.");
+    }
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\n Veriler: " + data }] }] })
-    });
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${key}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\n Veriler: " + data }] }] })
+      });
 
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error?.message || "API yanıt vermedi.");
-    
-    let text = json.candidates[0].content.parts[0].text;
-    // Markdown temizliği
-    return text.replace(/```json|```/g, "").trim();
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || "API yanıt vermedi.");
+      
+      const text = json.candidates[0].content.parts[0].text;
+      return text.replace(/```json|```/g, "").trim();
+    } catch (e) {
+      throw new Error("Bağlantı Hatası: " + e.message);
+    }
   };
 
   const runAssessment = async () => {
     setLoading(true);
-    setErrorLog("");
+    setErrorMsg("");
     try {
-      const prompt = "Sen Solo Leveling sistemisin. SADECE JSON döndür, açıklama yapma: {\"rank\":\"E\",\"title\":\"Avcı\",\"stats\":{\"strength\":10},\"analysis\":\"Analiz mesajı\"}";
+      const prompt = "Sen Solo Leveling sistemisin. SADECE JSON döndür: {\"rank\":\"E\",\"title\":\"Avcı\",\"stats\":{\"strength\":10},\"analysis\":\"analiz\"}";
       const result = await callAI(prompt, JSON.stringify(answers));
-      const parsed = JSON.parse(result);
-      setProfile(parsed);
+      setProfile(JSON.parse(result));
       setScreen("profile");
     } catch (e) {
-      console.error(e);
-      setErrorLog(e.message);
+      setErrorMsg(e.message);
     }
     setLoading(false);
   };
@@ -67,39 +64,38 @@ export default function App() {
   };
 
   return (
-    <div style={{ maxWidth: 400, margin: "auto", padding: 20 }}>
-      <style>{STYLES}</style>
+    <div style={{ maxWidth: 400, margin: "auto", padding: 20, color: "#fff", fontFamily: "sans-serif" }}>
+      <style>{`body{background:#050810} .btn{background:#4f46e5; color:#fff; padding:10px; width:100%; border:none; cursor:pointer; margin-top:10px}`}</style>
       
       {screen === "intro" && (
         <div style={{ textAlign: "center", marginTop: "20vh" }}>
           <h1>SOLO LEVELING</h1>
-          <button className="sl-btn" onClick={() => setScreen("assessment")}>SİSTEMİ BAŞLAT</button>
+          <button className="btn" onClick={() => setScreen("assessment")}>BAŞLAT</button>
         </div>
       )}
 
       {screen === "assessment" && !loading && (
         <div>
           <h2>{QUESTIONS[currentQ].question}</h2>
-          <input type="number" className="sl-inp" autoFocus onChange={e => setAnswers({...answers, [QUESTIONS[currentQ].id]: e.target.value})} onKeyDown={e => e.key === "Enter" && advanceQ()} />
-          <button className="sl-btn" onClick={advanceQ}>İLERLE</button>
+          <input type="number" style={{ width: "100%", padding: 10 }} onChange={e => setAnswers({...answers, [QUESTIONS[currentQ].id]: e.target.value})} onKeyDown={e => e.key === "Enter" && advanceQ()} />
+          <button className="btn" onClick={advanceQ}>İLERLE</button>
         </div>
       )}
 
-      {loading && <div style={{ textAlign: "center", marginTop: "20vh" }}>SİSTEM ANALİZ EDİYOR...</div>}
-
-      {errorLog && (
-        <div style={{ color: "#ef4444", background: "#1a1010", padding: 10, marginTop: 20, fontSize: 12 }}>
-          <strong>Hata Kaydı:</strong> {errorLog}
-          <br/> Vercel Environment Variables kısmını ve Key ismini kontrol edin.
+      {loading && <div style={{ textAlign: "center", marginTop: "20vh" }}>ANALİZ EDİLİYOR...</div>}
+      
+      {errorMsg && (
+        <div style={{ color: "#ff4444", marginTop: 20, padding: 10, border: "1px solid red", fontSize: "12px" }}>
+          <strong>HATA:</strong> {errorMsg}
         </div>
       )}
 
       {screen === "profile" && profile && (
-        <div style={{ textAlign: "center", border: `2px solid ${RANK_COLORS[profile.rank] || "#fff"}`, padding: 20 }}>
-          <h2 style={{ color: RANK_COLORS[profile.rank] }}>{profile.rank} SINIFI</h2>
-          <h1>{profile.title}</h1>
+        <div style={{ textAlign: "center", border: `2px solid ${RANK_COLORS[profile.rank]}`, padding: 20 }}>
+          <h1 style={{ color: RANK_COLORS[profile.rank] }}>{profile.rank} SINIFI</h1>
+          <h2>{profile.title}</h2>
           <p>{profile.analysis}</p>
-          <button className="sl-btn" onClick={() => window.location.reload()}>TEKRARLA</button>
+          <button className="btn" onClick={() => window.location.reload()}>YENİDEN DENE</button>
         </div>
       )}
     </div>
