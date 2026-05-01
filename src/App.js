@@ -170,7 +170,7 @@ export default function App() {
     setSaveNotif(true);
     const t = setTimeout(() => setSaveNotif(false), 2000);
     return () => clearTimeout(t);
-  }, [profile, quests, completedQuests, xp]);
+  }, [profile, quests, completedQuests, xp, chatHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadGame = () => {
     const s = loadMem();
