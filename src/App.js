@@ -77,7 +77,7 @@ const callClaude = async (system, userMsg, history = []) => {
   const data = await res.json();
   if (!data.content || !data.content[0]) throw new Error("Empty response");
   return data.content[0].text;
-};
+},
 
 // ── Styles injected once ──
 const STYLES = `
