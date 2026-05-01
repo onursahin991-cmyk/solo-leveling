@@ -59,7 +59,7 @@ const loadMem = () => { try { const r = localStorage.getItem(SAVE_KEY); return r
 
 // ── Claude API call (Gemini implementation) ──
 const callClaude = async (system, userMsg, history = []) => {
-  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=YOUR_API_KEY", {
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDu323s19ug2qSezAemC7qc6jWBH6HQ6_Y", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
