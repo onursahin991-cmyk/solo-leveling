@@ -57,13 +57,12 @@ const SAVE_KEY = "solo_leveling_v2";
 const saveMem = (d) => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch(e) {} };
 const loadMem = () => { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch(e) { return null; } };
 
-// ── Claude API call (Gemini implementation) ──
 const callClaude = async (system, userMsg, history = []) => {
-  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDu323s19ug2qSezAemC7qc6jWBH6HQ6_Y", {
+  // Vercel Environment Variable kullanımı:
+  const apiKey = process.env.REACT_APP_GEMINI_KEY;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [
         ...history.map(h => ({
@@ -72,19 +71,18 @@ const callClaude = async (system, userMsg, history = []) => {
         })),
         {
           role: "user",
-          parts: [{ text: `${system}\n\nKullanıcı Mesajı: ${userMsg}` }]
+          parts: [{ text: `${system}\n\nVeri: ${userMsg}` }]
         }
       ]
     })
   });
 
-  if (!res.ok) throw new Error(`API error ${res.status}`);
+  if (!res.ok) throw new Error(`API Hatası: ${res.status}`);
   const data = await res.json();
-  if (!data.candidates || !data.candidates[0]) throw new Error("Empty response");
+  if (!data.candidates || !data.candidates[0]) throw new Error("Boş yanıt");
   return data.candidates[0].content.parts[0].text;
 };
 
-// ── Styles injected once ──
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -114,7 +112,6 @@ const STYLES = `
 .sl-tab:not(.active){color:#334155}
 .sl-tab:not(.active):hover{color:#475569}
 .sl-excard{padding:12px 14px;margin-bottom:8px}
-.sl-excard:last-child{margin-bottom:0}
 .sl-confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px}
 `;
 
@@ -207,11 +204,10 @@ export default function App() {
     let i = 0;
     const iv = setInterval(() => setLoadingMsg(msgs[i++ % msgs.length]), 900);
     try {
-      const result = await callClaude(
-        `Sen Solo Leveling evrenindeki Avcı Değerlendirme Sistemi'sin. SADECE geçerli JSON döndür, başka hiçbir şey yazma, markdown kullanma.
-Format: {"rank":"E/D/C/B/A/S/S+","title":"yaratıcı Türkçe unvan","stats":{"strength":0-100,"agility":0-100,"endurance":0-100,"vitality":0-100,"will":0-100,"perception":0-100,"balance":0-100},"analysis":"2-3 cümle dramatik Türkçe analiz","weakest":"stat_adi","strongest":"stat_adi"}`,
-        `Şınav:${answers.pushup || 0} Mekik:${answers.situp || 0} Squat:${answers.squat || 0} Plank:${answers.plank || 0}sn Koşu:${answers.run || 0}dk Barfiks:${answers.pullup || 0}`
-      );
+      const prompt = "Sen Solo Leveling evrenindeki Avcı Değerlendirme Sistemi'sin. SADECE geçerli JSON döndür, başka hiçbir şey yazma, markdown kullanma. Format: {\"rank\":\"E/D/C/B/A/S/S+\",\"title\":\"unvan\",\"stats\":{\"strength\":0-100,\"agility\":0-100,\"endurance\":0-100,\"vitality\":0-100,\"will\":0-100,\"perception\":0-100,\"balance\":0-100},\"analysis\":\"analiz\",\"weakest\":\"stat\",\"strongest\":\"stat\"}";
+      const userData = `Şınav:${answers.pushup || 0} Mekik:${answers.situp || 0} Squat:${answers.squat || 0} Plank:${answers.plank || 0}sn Koşu:${answers.run || 0}dk Barfiks:${answers.pullup || 0}`;
+      
+      const result = await callClaude(prompt, userData);
       const clean = result.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       setProfile(parsed);
@@ -221,7 +217,7 @@ Format: {"rank":"E/D/C/B/A/S/S+","title":"yaratıcı Türkçe unvan","stats":{"s
       setScreen("profile");
     } catch (err) {
       clearInterval(iv);
-      setApiError("API hatası: " + (err.message || "Bilinmeyen hata"));
+      setApiError("Analiz Hatası: " + err.message);
       setScreen("assessment");
     }
   };
@@ -229,18 +225,15 @@ Format: {"rank":"E/D/C/B/A/S/S+","title":"yaratıcı Türkçe unvan","stats":{"s
   const doLoadQuests = async (prof, done) => {
     setLoading(true);
     try {
-      const result = await callClaude(
-        `Sen Solo Leveling Görev Sistemi'sin. SADECE geçerli JSON döndür, markdown kullanma.
-Format: {"quests":[{"id":"uid_1","title":"başlık","description":"kısa açıklama","task":"net talimat","xp":50-200,"difficulty":"KOLAY/ORTA/ZOR","category":"güç/dayanıklılık/çeviklik/irade/meditasyon/denge/duyular"}]}
-Kategoriler: güç, dayanıklılık, çeviklik, irade, meditasyon, denge, duyular.
-Her seferinde farklı kategorilerden 4 görev oluştur. id alanları benzersiz olmalı.`,
-        `Rütbe:${prof.rank} Unvan:${prof.title} Zayıf:${prof.weakest} Güçlü:${prof.strongest} Stats:${JSON.stringify(prof.stats)} Tamamlanan:${done.slice(-5).join(",") || "Yok"}`
-      );
+      const prompt = "Sen Solo Leveling Görev Sistemi'sin. SADECE geçerli JSON döndür. Format: {\"quests\":[{\"id\":\"uid\",\"title\":\"başlık\",\"description\":\"açıklama\",\"task\":\"görev\",\"xp\":50,\"difficulty\":\"KOLAY\",\"category\":\"güç\"}]}";
+      const status = `Rütbe:${prof.rank} Stats:${JSON.stringify(prof.stats)} Tamamlanan:${done.slice(-5).join(",") || "Yok"}`;
+      
+      const result = await callClaude(prompt, status);
       const clean = result.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       setQuests(parsed.quests || []);
     } catch (err) {
-      setApiError("Görev yükleme hatası: " + (err.message || "Bilinmeyen hata"));
+      setApiError("Görev Hatası: " + err.message);
     }
     setLoading(false);
   };
@@ -269,13 +262,13 @@ Her seferinde farklı kategorilerden 4 görev oluştur. id alanları benzersiz o
     setLoading(true);
     try {
       const reply = await callClaude(
-        `Solo Leveling sisteminin rehber AI'ısın. Kısa, motive edici Türkçe cevaplar ver. Maks 3 cümle. Dramatik ve güçlü ol. Meditasyon, denge ve duyular konularında da rehberlik edebilirsin. Avcı: ${profile?.rank} rütbeli, "${profile?.title}", ${xp} XP.`,
+        `Solo Leveling rehber AI. Avcı: ${profile?.rank} rütbeli, ${profile?.title}.`,
         msg,
         chatHistory.slice(-6)
       );
       setChatHistory([...newHist, { role: "assistant", content: reply }]);
     } catch {
-      setChatHistory([...newHist, { role: "assistant", content: "Sistem geçici olarak bağlanamıyor. Tekrar dene." }]);
+      setChatHistory([...newHist, { role: "assistant", content: "Bağlantı hatası." }]);
     }
     setLoading(false);
   };
@@ -283,7 +276,6 @@ Her seferinde farklı kategorilerden 4 görev oluştur. id alanları benzersiz o
   const rc = profile ? (RANK_COLORS[profile.rank] || "#6b7280") : "#6b7280";
   const rg = profile ? (RANK_GLOWS[profile.rank] || "rgba(107,114,128,0.3)") : "rgba(107,114,128,0.3)";
   const xpThreshold = 500;
-  const xpProgress = (xp % xpThreshold) / xpThreshold * 100;
   const currentLevel = Math.floor(xp / xpThreshold) + 1;
 
   const advanceQ = () => {
@@ -294,203 +286,61 @@ Her seferinde farklı kategorilerden 4 görev oluştur. id alanları benzersiz o
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#050810", color: "#e2e8f0", fontFamily: "'Cinzel',Georgia,serif", position: "relative", overflowX: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: "#050810", color: "#e2e8f0", fontFamily: "'Cinzel',serif", position: "relative", overflowX: "hidden" }}>
       <style>{STYLES}</style>
-
-      {confirmOpen && (
-        <ConfirmDialog
-          message="Tüm ilerleme silinecek ve sıfırdan başlayacaksın. Emin misin?"
-          onYes={doReset}
-          onNo={() => setConfirmOpen(false)}
-        />
-      )}
-
-      {/* Particles */}
+      {confirmOpen && <ConfirmDialog message="Sıfırlansın mı?" onYes={doReset} onNo={() => setConfirmOpen(false)} />}
+      
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}>
         {particles.map(p => (
-          <div key={p.id} style={{ position: "absolute", left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size}px`, borderRadius: "50%", background: `hsla(${p.hue},80%,70%,${p.opacity})`, boxShadow: `0 0 ${p.size * 4}px hsla(${p.hue},80%,70%,.3)`, animation: `pFloat ${p.dur}s ${p.delay}s ease-in-out infinite` }} />
+          <div key={p.id} style={{ position: "absolute", left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size}px`, borderRadius: "50%", background: `hsla(${p.hue},80%,70%,${p.opacity})`, animation: `pFloat ${p.dur}s ${p.delay}s infinite` }} />
         ))}
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(79,70,229,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(79,70,229,.025) 1px,transparent 1px)", backgroundSize: "50px 50px" }} />
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center,transparent 40%,rgba(5,8,16,.85) 100%)" }} />
       </div>
 
-      {saveNotif && (
-        <div style={{ position: "fixed", top: 14, right: 14, zIndex: 200, background: "#0d1117", border: "1px solid #10b981", padding: "7px 13px", fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: "#10b981", letterSpacing: 2, animation: "saveFlash 2s ease forwards" }}>✓ KAYDEDİLDİ</div>
-      )}
-
-      {apiError && (
-        <div style={{ position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 200, background: "#1a0a0a", border: "1px solid #ef4444", padding: "8px 16px", fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: "#fca5a5", letterSpacing: 1, maxWidth: "90vw", textAlign: "center" }}>
-          ⚠ {apiError}
-          <button onClick={() => setApiError("")} style={{ background: "none", border: "none", color: "#ef4444", marginLeft: 10, cursor: "pointer", fontSize: 14 }}>×</button>
-        </div>
-      )}
-
-      {levelUp && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-          <div style={{ fontFamily: "'Cinzel',serif", fontSize: "clamp(20px,5vw,50px)", fontWeight: 900, color: "#fbbf24", textShadow: "0 0 40px rgba(251,191,36,.8)", animation: "lvlUp 2.2s ease-out forwards", letterSpacing: 3, textAlign: "center", padding: "0 20px" }}>⚡ TAMAMLANDI ⚡</div>
-        </div>
-      )}
-
-      <div style={{ position: "relative", zIndex: 1, maxWidth: 640, margin: "0 auto", padding: "20px 16px", minHeight: "100vh" }}>
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 640, margin: "0 auto", padding: "20px 16px" }}>
         {screen === "intro" && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", textAlign: "center" }}>
-            <div style={{ animation: "float 4s ease-in-out infinite", fontSize: 72, marginBottom: 12, filter: "drop-shadow(0 0 20px rgba(99,102,241,.7))" }}>⚔️</div>
-            <div style={{ fontSize: 10, letterSpacing: 6, color: "#475569", fontFamily: "'Rajdhani',sans-serif", marginBottom: 12 }}>HUNTER ASSOCIATION SYSTEM</div>
-            <h1 style={{ fontSize: "clamp(28px,8vw,54px)", fontWeight: 900, background: "linear-gradient(135deg,#c7d2fe,#818cf8,#6366f1)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1.1, marginBottom: 8 }}>SOLO LEVELING</h1>
-            <div style={{ fontSize: "clamp(11px,3vw,16px)", color: "#64748b", fontFamily: "'Rajdhani',sans-serif", fontWeight: 600, letterSpacing: 3, marginBottom: 36 }}>HUNTER SYSTEM v2.1</div>
-            <div style={{ background: "linear-gradient(135deg,rgba(30,27,75,.5),rgba(15,23,42,.8))", border: "1px solid #1e293b", padding: "18px 22px", marginBottom: 24, maxWidth: 400, fontFamily: "'Rajdhani',sans-serif", fontSize: 13, color: "#64748b", lineHeight: 1.8 }}>
-              "Sistemin gözü seni seçti. Fiziksel durumun analiz edilecek, sınıfın belirlenecek ve yükseliş yolculuğun başlayacak."
-            </div>
-            <button className="sl-btn" onClick={() => setScreen("assessment")} style={{ maxWidth: 300, fontSize: 12, padding: "14px 28px", marginBottom: 10 }}>◆ DEĞERLENDİRMEYE BAŞLA ◆</button>
-            {hasSave && <button className="sl-btn-ghost" onClick={loadGame} style={{ maxWidth: 300 }}>↺ KAYDI YÜKLE</button>}
+          <div style={{ textAlign: "center", paddingTop: "20vh" }}>
+            <h1 style={{ fontSize: "3rem", marginBottom: "1rem" }}>SOLO LEVELING</h1>
+            <button className="sl-btn" onClick={() => setScreen("assessment")}>SİSTEME GİRİŞ</button>
+            {hasSave && <button className="sl-btn-ghost" onClick={loadGame} style={{ marginTop: "1rem" }}>KAYDI YÜKLE</button>}
           </div>
         )}
 
         {screen === "assessment" && (
-          <div style={{ paddingTop: 40 }}>
-            <div style={{ textAlign: "center", marginBottom: 30 }}>
-              <div style={{ fontSize: 10, letterSpacing: 5, color: "#4f46e5", fontFamily: "'Rajdhani',sans-serif", marginBottom: 8 }}>HUNTER EVALUATION — {currentQ + 1}/{QUESTIONS.length}</div>
-              <h2 style={{ fontSize: 22, fontWeight: 700, color: "#c7d2fe" }}>Fiziksel Değerlendirme</h2>
-              <div style={{ height: 2, marginTop: 12, background: `linear-gradient(to right,#4f46e5 ${(currentQ / QUESTIONS.length) * 100}%,#1e293b ${(currentQ / QUESTIONS.length) * 100}%)`, transition: "all .5s" }} />
-            </div>
-            <div style={{ background: "linear-gradient(135deg,#0d1117,#0a0f1e)", border: "1px solid #1e293b", padding: "24px 20px", animation: "slideUp .4s ease" }}>
-              <div style={{ fontSize: 10, letterSpacing: 4, color: "#4f46e5", fontFamily: "'Rajdhani',sans-serif", marginBottom: 10 }}>[{QUESTIONS[currentQ].label.toUpperCase()}]</div>
-              <div style={{ fontSize: "clamp(15px,4vw,20px)", color: "#e2e8f0", marginBottom: 20, lineHeight: 1.5, fontWeight: 600 }}>{QUESTIONS[currentQ].question}</div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
-                <input
-                  type="number" min="0" className="sl-inp"
-                  placeholder={`${QUESTIONS[currentQ].unit} gir...`}
-                  value={answers[QUESTIONS[currentQ].id] || ""}
-                  onChange={e => setAnswers(p => ({ ...p, [QUESTIONS[currentQ].id]: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && advanceQ()}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ color: "#475569", fontFamily: "'Rajdhani',sans-serif", fontSize: 12, whiteSpace: "nowrap" }}>{QUESTIONS[currentQ].unit}</span>
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                {currentQ > 0 && (
-                  <button className="sl-btn" onClick={() => setCurrentQ(q => q - 1)} style={{ flex: 1, background: "transparent", borderColor: "#1e293b", color: "#475569", fontSize: 11 }}>← GERİ</button>
-                )}
-                <button className="sl-btn" style={{ flex: 2, fontSize: 11 }} onClick={advanceQ}>
-                  {currentQ < QUESTIONS.length - 1 ? "İLERİ →" : "◆ ANALİZ ET ◆"}
-                </button>
-              </div>
-            </div>
+          <div>
+            <h2>{QUESTIONS[currentQ].question}</h2>
+            <input 
+              type="number" 
+              className="sl-inp" 
+              value={answers[QUESTIONS[currentQ].id] || ""} 
+              onChange={e => setAnswers({...answers, [QUESTIONS[currentQ].id]: e.target.value})}
+              onKeyDown={e => e.key === "Enter" && advanceQ()}
+            />
+            <button className="sl-btn" style={{ marginTop: "1rem" }} onClick={advanceQ}>DEVAM ET</button>
           </div>
         )}
 
-        {screen === "loading" && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-            <div style={{ position: "relative", width: 100, height: 100, marginBottom: 30 }}>
-              <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid transparent", borderTopColor: "#4f46e5", animation: "spin 1s linear infinite" }} />
-              <div style={{ position: "absolute", inset: 6, borderRadius: "50%", border: "2px solid transparent", borderBottomColor: "#7c3aed", animation: "spinR 1.5s linear infinite" }} />
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>⚔️</div>
-            </div>
-            <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 12, letterSpacing: 3, color: "#64748b", textTransform: "uppercase" }}>{loadingMsg}</div>
-          </div>
-        )}
+        {screen === "loading" && <div style={{ textAlign: "center", paddingTop: "30vh" }}>{loadingMsg}</div>}
 
         {screen === "profile" && profile && (
-          <div style={{ paddingTop: 14, animation: "slideUp .5s ease" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 10, letterSpacing: 4, color: "#334155", fontFamily: "'Rajdhani',sans-serif" }}>HUNTER PROFILE</div>
-              <button className="sl-btn-ghost" onClick={resetGame} style={{ fontSize: 10, padding: "6px 12px" }}>↺ SIFIRLA</button>
+          <div>
+            <div style={{ border: `1px solid ${rc}`, padding: "20px", boxShadow: `0 0 20px ${rg}` }}>
+              <h3>{profile.rank} SINIFI</h3>
+              <h1>{profile.title}</h1>
             </div>
-            <div style={{ background: "linear-gradient(135deg,#0d1117,#0a0f1e)", border: `1px solid ${rc}`, boxShadow: `0 0 32px ${rg}`, padding: "20px 18px", marginBottom: 10, display: "flex", alignItems: "center", gap: 16, animation: "rankIn .8s cubic-bezier(.34,1.56,.64,1)" }}>
-              <div style={{ minWidth: 68, height: 68, border: `2px solid ${rc}`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 22px ${rg}`, background: `radial-gradient(circle,${rc}15,transparent)`, flexShrink: 0 }}>
-                <span style={{ fontSize: 30, fontWeight: 900, color: rc, textShadow: `0 0 16px ${rc}`, fontFamily: "'Cinzel',serif" }}>{profile.rank}</span>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, letterSpacing: 4, color: rc, fontFamily: "'Rajdhani',sans-serif", marginBottom: 4 }}>◆ AVCI SINIFI</div>
-                <div style={{ fontSize: "clamp(13px,3.5vw,18px)", fontWeight: 700, color: "#e2e8f0", lineHeight: 1.3 }}>{profile.title}</div>
-              </div>
-            </div>
-            <div style={{ background: "#0a0f1a", border: "1px solid #1e293b", padding: "11px 14px", marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
-                <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 10, letterSpacing: 3, color: "#475569" }}>SEVİYE {currentLevel}</span>
-                <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 11, color: "#fbbf24", fontWeight: 700 }}>⚡ {xp} XP</span>
-              </div>
-              <div style={{ height: 5, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${xpProgress}%`, background: "linear-gradient(to right,#a16207,#fbbf24)", borderRadius: 3, transition: "width .8s ease" }} />
-              </div>
-            </div>
-            <div style={{ background: "#0a0f1a", border: "1px solid #1e293b", padding: "12px 15px", marginBottom: 10, fontFamily: "'Rajdhani',sans-serif", fontSize: 13, color: "#64748b", lineHeight: 1.7, fontStyle: "italic" }}>
-              "{profile.analysis}"
-            </div>
-            <div style={{ background: "linear-gradient(135deg,#0d1117,#0a0f1e)", border: "1px solid #1e293b", padding: "16px", marginBottom: 14 }}>
-              <div style={{ fontSize: 10, letterSpacing: 4, color: "#4f46e5", fontFamily: "'Rajdhani',sans-serif", marginBottom: 14 }}>◆ İSTATİSTİKLER</div>
-              {Object.entries(profile.stats).map(([k, v]) => {
-                const lb = { strength: "GÜÇ", agility: "ÇEVİKLİK", endurance: "DAYANIKLILIK", vitality: "CANLILIK", will: "İRADE", perception: "ALGI", balance: "DENGE" };
-                const cl = { strength: "#ef4444", agility: "#3b82f6", endurance: "#10b981", vitality: "#f59e0b", will: "#8b5cf6", perception: "#ec4899", balance: "#06b6d4" };
-                if (!lb[k]) return null;
-                return (
-                  <div key={k} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 10, letterSpacing: 2, color: "#475569" }}>{lb[k]}</span>
-                      <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 11, fontWeight: 700, color: cl[k] }}>{v}</span>
-                    </div>
-                    <div style={{ height: 5, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.min(v, 100)}%`, borderRadius: 3, background: cl[k], transition: "width 1.5s cubic-bezier(.4,0,.2,1)" }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <button className="sl-btn" onClick={() => { setScreen("quest"); setActiveTab("quests"); }}>◆ GÖREV PANOSUNU AÇ ◆</button>
+            <button className="sl-btn" style={{ marginTop: "1rem" }} onClick={() => setScreen("quest")}>GÖREVLER</button>
           </div>
         )}
 
-        {screen === "quest" && profile && (
-          <div style={{ paddingTop: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <button onClick={() => setScreen("profile")} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontFamily: "'Rajdhani',sans-serif", fontSize: 12, letterSpacing: 2 }}>← PROFİL</button>
-              <div style={{ color: "#fbbf24", fontFamily: "'Rajdhani',sans-serif", fontSize: 12 }}>⚡ {xp}</div>
-            </div>
-            <div style={{ display: "flex", borderBottom: "1px solid #1e293b", marginBottom: 18, overflowX: "auto" }}>
-              {[{ id: "quests", label: "⚔️ GÖREVLER" }, { id: "mind", label: "🧘 ZİHİN" }, { id: "chat", label: "🔮 REHBERİ" }, { id: "history", label: "📜 GEÇMİŞ" }].map(t => (
-                <button key={t.id} className={`sl-tab ${activeTab === t.id ? "active" : ""}`} onClick={() => setActiveTab(t.id)}>{t.label}</button>
-              ))}
-            </div>
-
-            {activeTab === "quests" && (
-              <div>
-                {quests.map((q, i) => {
-                  const cat = CATEGORY_INFO[q.category] || { icon: "◆", color: "#64748b" };
-                  return (
-                    <div key={q.id || i} className="sl-qcard">
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <span style={{ fontSize: 15 }}>{cat.icon}</span>
-                          <span style={{ fontSize: 9, color: cat.color }}>{(q.category || "").toUpperCase()}</span>
-                        </div>
-                        <span style={{ color: "#fbbf24", fontSize: 11 }}>+{q.xp} XP</span>
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>{q.title}</div>
-                      <div style={{ background: "#0d1117", padding: "8px", marginTop: "8px", fontSize: 12, color: "#94a3b8" }}>{q.task}</div>
-                      <button className="sl-btn" style={{ marginTop: "10px", padding: "8px" }} onClick={() => completeQuest(q)}>TAMAMLANDI</button>
-                    </div>
-                  );
-                })}
+        {screen === "quest" && (
+          <div>
+            <button className="sl-btn-ghost" onClick={() => setScreen("profile")}>GERİ</button>
+            {quests.map(q => (
+              <div key={q.id} className="sl-qcard">
+                <h4>{q.title}</h4>
+                <p>{q.task}</p>
+                <button className="sl-btn" onClick={() => completeQuest(q)}>TAMAMLANDI</button>
               </div>
-            )}
-            
-            {activeTab === "chat" && (
-              <div style={{ background: "#0d1117", border: "1px solid #1e293b", padding: 16 }}>
-                <div style={{ maxHeight: 300, overflowY: "auto", marginBottom: 10 }}>
-                  {chatHistory.map((m, i) => (
-                    <div key={i} style={{ marginBottom: 10, padding: 8, background: "#0f172a", border: "1px solid #1e293b", fontSize: 13 }}>
-                      <div style={{ fontSize: 9, color: "#4f46e5" }}>{m.role === "user" ? "SEN" : "SİSTEM"}</div>
-                      {m.content}
-                    </div>
-                  ))}
-                  <div ref={chatEndRef} />
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input className="sl-inp" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={e => e.key === "Enter" && askAI()} placeholder="Sisteme sor..." />
-                  <button className="sl-btn" onClick={askAI} style={{ width: "auto" }}>GÖNDER</button>
-                </div>
-              </div>
-            )}
+            ))}
           </div>
         )}
       </div>
