@@ -60,16 +60,19 @@ const loadMem = () => { try { const r = localStorage.getItem(SAVE_KEY); return r
 
 // ── Claude API call ──
 const callClaude = async (system, userMsg, history = []) => {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1200,
-      system,
-      messages: [...history, { role: "user", content: userMsg }],
-    }),
-  });
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=YOUR_API_KEY", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    contents: [
+      {
+        parts: [
+          {
+            text: `Sen bir Solo Leveling evrenindeki Avcı Değerlendirme Sistemi'sin. SADECE geçerli JSON döndür, başka hiçbir şey yazma. İşte girilen veriler: Pushup: ${userMsg.pushup}, Situp: ${userMsg.situp}, ...` 
+          
+    
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = await res.json();
   if (!data.content || !data.content[0]) throw new Error("Empty response");
