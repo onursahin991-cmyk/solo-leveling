@@ -53,10 +53,10 @@ const SENSE_EXERCISES = [
   { name: "Dokunsal Tarama", desc: "Yavaşça yürü, ayaklarının altındaki her dokuyu hisset. Çıplak ayak ideal.", time: "5 dk", xp: 65 },
 ];
 
-// ── In-memory state store (replaces localStorage which is blocked in artifacts) ──
-const memoryStore = { data: null };
-const saveMem = (d) => { memoryStore.data = JSON.parse(JSON.stringify(d)); };
-const loadMem = () => memoryStore.data ? JSON.parse(JSON.stringify(memoryStore.data)) : null;
+// ── localStorage — gerçek web sitesinde çalışır ──
+const SAVE_KEY = "solo_leveling_v2";
+const saveMem = (d) => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch(e) {} };
+const loadMem = () => { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch(e) { return null; } };
 
 // ── Claude API call ──
 const callClaude = async (system, userMsg, history = []) => {
@@ -185,7 +185,7 @@ export default function App() {
 
   const resetGame = () => setConfirmOpen(true);
   const doReset = () => {
-    memoryStore.data = null;
+    try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
     setProfile(null); setQuests([]); setCompletedQuests([]);
     setXp(0); setChatHistory([]); setAnswers({}); setCurrentQ(0);
     setHasSave(false); setScreen("intro"); setConfirmOpen(false);
