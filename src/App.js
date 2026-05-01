@@ -57,9 +57,33 @@ const SENSE_EXERCISES = [
 const SAVE_KEY = "solo_leveling_v2";
 const saveMem = (d) => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch(e) {} };
 const loadMem = () => { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch(e) { return null; } };
-
-// ── Claude API call ──
 const callClaude = async (system, userMsg, history = []) => {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system,
+      messages: [...history, { role: "user", content: userMsg }],
+    }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  if (!data.content || !data.content[0]) throw new Error("Empty response");
+  return data.content[0].text;
+};
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system,
+      messages: [...history, { role: "user", content: userMsg }],
+    }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  if (!data.content || !data.content[0]) throw new Error("Empty response");
+  return data.content[0].text;
+};
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
